@@ -9,3 +9,14 @@ This repo contains the required elements to simulate the warehouse traveling sal
   <img align="center" src="static/image.png" width=75%>
 </p>
 <p align="center"><b>Scenario 1:</b> Calculating shortest path between the pickup point and a waypoint </p>
+
+<p align="center">
+  <img align="center" src="static/ClusterBins.png" width=75%>
+</p>
+<p align="center"><b>Scenario 1:</b> Create clusters to optimize dispatching rules </p>
+
+<p align="center">
+  <img align="center" src="static/TspPath.png" width=75%>
+</p>
+<p align="center"><b>Scenario 1:</b> Shortest distance pickup path </p>
+
