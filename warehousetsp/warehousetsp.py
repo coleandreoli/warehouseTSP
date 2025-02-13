@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import networkx as nx
+from .simulation.simulation import Simulation
 
 class Grid:
     def __init__(self, grid, waypoints, scale=1):
@@ -31,9 +32,13 @@ class Grid:
     def node2pos(self, node: int):
         return (node // self.grid.shape[1], node % self.grid.shape[1])
 
-    def find_path(self, start: str, end: str, model: str = "dijkstra"):
-        start = self.pos2node(self.waypoints[start])
-        end = self.pos2node(self.waypoints[end])
+    def find_path(self, start, end, model: str = "dijkstra", node=False):
+        if node:
+            start = start
+            end = end
+        else:
+            start = self.pos2node(self.waypoints[start])
+            end = self.pos2node(self.waypoints[end])
         if model == "astar":
 
             def heuristic(a, b):
@@ -41,7 +46,7 @@ class Grid:
                 x2, y2 = self.G.nodes[b]["pos"]
                 return np.linalg.norm(np.array([x1, y1]) - np.array([x2, y2]))
 
-            return nx.astar_path(
+            path =  nx.astar_path(
                 self.G, start, end, heuristic=heuristic, weight="weight"
             )
         elif model == "dijkstra":
@@ -50,15 +55,35 @@ class Grid:
             except:
                 print("No path found")
                 path = []
-            return path
+        
+        distance = sum(
+            self.G[u][v]["weight"] for u, v in zip(path, path[1:])
+        )
+        return path, distance
+        
+    def tsp(self, pickup_node: list, nodes: list):
+        tsp = nx.approximation.traveling_salesman_problem
+        pickup_list = pickup_node + nodes
+        tsp_route = tsp(self.G, nodes=pickup_list)
+        tsp_distance = sum(
+            self.G[u][v]["weight"] for u, v in zip(tsp_route, tsp_route[1:])
+        )
+        
+        seen = set()
+        pickup_order = [
+            node
+            for node in tsp_route
+            if node in pickup_list and not (node in seen or seen.add(node))
+        ][1:]
+        return tsp_route, tsp_distance, pickup_order
 
-    def plot(self, path=None):
+    def plot(self, path: list=None):
         plt.imshow(self.grid, cmap="gray")
         plt.grid(True)
 
         for key, (x, y) in self.waypoints.items():
             plt.plot(x, y, "go")
-            plt.text(x, y, key, fontsize=12, ha="right")
+            #plt.text(x, y, key, fontsize=12, ha="right")
         if path:
             # Plot the path
             path_coords = [self.node2pos(wp) for wp in path]
@@ -77,3 +102,29 @@ class Grid:
             edge_color="gray",
         )
         plt.show()
+
+class Dispatch:
+    def __init__(self, wos, wh):
+        """Generates Pick lists depending on time, location, and bin"""
+        self.wos = wos
+        self.wh = wh
+        self.sim = Simulation(wh)
+
+    def fifo(self):
+        pass
+
+    def lifo(self):
+        pass
+
+    def deplete_max_bins(self, items: list):
+        pl = []
+        for item in items:
+            bin = self.sim.get_highest_bin(item)
+            pl.append({"bin": bin, "item": item})
+        return pl
+    
+    def deplete_min_bins(self):
+        pass
+
+    def shortest_path(self):
+        pass
