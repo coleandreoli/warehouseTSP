@@ -6,7 +6,7 @@ This repo contains the required elements to simulate the warehouse traveling sal
 
 
 <p align="center">
-  <img align="center" src="static/image.png" width=75%>
+  <img align="center" src="static/map_2_route.png" width=75%>
 </p>
 <p align="center"> Shortest path between the pickup point and a waypoint </p>
 
