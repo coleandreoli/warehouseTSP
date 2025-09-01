@@ -1,120 +1,102 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import networkx as nx
 from .simulation.simulation import Simulation
 
 
 class Grid:
-    def __init__(self, grid, waypoints, scale=1):
-        self.grid = grid
-        self.waypoints = waypoints
-        self.scale = scale
-        self.G = nx.Graph()
-        self.make_graph()
+	"""Constructs a graph from a 2D grid and solves path and TSP problems using NetworkX.
 
-    def make_graph(self):
-        x_shape = self.grid.shape[1]
-        for n, pos in enumerate(np.ndindex(self.grid.shape)):
-            x = pos[1]
-            y = pos[0]
-            if self.grid[pos] == 1:
-                self.G.add_node(n, pos=(x, -y))
-                # Add edged to north and west neighbors if pathway
-                if x > 0 and self.grid[y, x - 1] == 1:
-                    self.G.add_edge(n, n - 1, weight=self.scale)
-                if y > 0 and self.grid[y - 1, x] == 1:
-                    north_neighbor = n - x_shape
-                    self.G.add_edge(n, north_neighbor, weight=self.scale)
+	Navigable nodes are grid cells with value 1. Nodes connect to their west and north neighbors,
+	with edge weights scaled by the provided factor. The class offers methods to validate graph
+	connectivity, convert between grid positions and node indices, compute shortest paths, approximate
+	a TSP route for given nodes, and visualize the grid and routes for debugging.
 
-    def validate(self):
-        if nx.is_connected(self.G):
-            return True
-        else:
-            return False
+	Attributes:
+	        grid (np.ndarray): 2D array representing the grid (1 indicates a pathway).
+	        scale (int or float): Factor to scale edge weights.
+	        G (nx.Graph): Graph built from the grid.
+	"""
 
-    def pos2node(self, pos: tuple):
-        return pos[1] * self.grid.shape[1] + pos[0]
+	def __init__(self, grid, scale=1):
+		self.grid = grid
+		self.scale = scale
+		self.G = nx.Graph()
+		self.make_graph()
 
-    def node2pos(self, node: int):
-        return (node // self.grid.shape[1], node % self.grid.shape[1])
+	def make_graph(self):
+		x_shape = self.grid.shape[1]
+		for n, pos in enumerate(np.ndindex(self.grid.shape)):
+			x = pos[1]
+			y = pos[0]
+			if self.grid[pos] == 1:
+				self.G.add_node(n, pos=(x, -y))
+				# Add edged to north and west neighbors if pathway
+				if x > 0 and self.grid[y, x - 1] == 1:
+					self.G.add_edge(n, n - 1, weight=self.scale)
+				if y > 0 and self.grid[y - 1, x] == 1:
+					north_neighbor = n - x_shape
+					self.G.add_edge(n, north_neighbor, weight=self.scale)
 
-    def find_path(self, start, end, model: str = "dijkstra", node=False):
-        if node:
-            start = start
-            end = end
-        else:
-            start = self.pos2node(self.waypoints[start])
-            end = self.pos2node(self.waypoints[end])
-        if model == "astar":
+	def validate(self) -> bool:
+		if nx.is_connected(self.G):
+			return True
+		else:
+			return False
 
-            def heuristic(a, b):
-                x1, y1 = self.G.nodes[a]["pos"]
-                x2, y2 = self.G.nodes[b]["pos"]
-                return np.linalg.norm(np.array([x1, y1]) - np.array([x2, y2]))
+	def pos2node(self, pos: tuple) -> int:
+		return pos[1] * self.grid.shape[1] + pos[0]
 
-            path = nx.astar_path(
-                self.G, start, end, heuristic=heuristic, weight="weight"
-            )
-        elif model == "dijkstra":
-            try:
-                path = nx.shortest_path(self.G, start, end)
-            except nx.NetworkXNoPath:
-                print("No path found between the given nodes.")
-                path = []
-            except nx.NodeNotFound as e:
-                print(f"Error: {e}")
-                path = []
-            except Exception as e:
-                print(f"Unexpected error: {e}")
-                path = []
+	def node2pos(self, node: int) -> tuple:
+		return (node // self.grid.shape[1], node % self.grid.shape[1])
 
-        distance = sum(self.G[u][v]["weight"] for u, v in zip(path, path[1:]))
-        return path, distance
+	def find_path(self, start: int, end: int):
+		try:
+			path = nx.shortest_path(self.G, start, end)
+		except nx.NetworkXNoPath:
+			print("No path found between the given nodes.")
+			path = []
+		except nx.NodeNotFound as e:
+			print(f"Error: {e}")
+			path = []
+		except Exception as e:
+			print(f"Unexpected error: {e}")
+			path = []
 
-    def tsp(self, pickup_node: list, nodes: list):
-        tsp = nx.approximation.traveling_salesman_problem
-        pickup_list = pickup_node + nodes
-        tsp_route = tsp(self.G, nodes=pickup_list)
-        tsp_distance = sum(
-            self.G[u][v]["weight"] for u, v in zip(tsp_route, tsp_route[1:])
-        )
+		distance = sum(self.G[u][v]["weight"] for u, v in zip(path, path[1:]))
+		return path, distance
 
-        seen = set()
-        pickup_order = []
+	def tsp(self, pickup_node: list, nodes: list, debug: bool = False):
+		tsp = nx.approximation.traveling_salesman_problem
+		pickup_list = pickup_node + nodes
+		try:
+			tsp_route = tsp(self.G, nodes=pickup_list)
+		except KeyError as e:
+			print(
+				f"Route optimization failed: One or more pickup locations are not found in the current grid overlay. "
+				f"This may be due to a mismatch between the pickup list and the warehouse layout. Missing node: {str(e)}"
+			)
+		pickup_order = list(dict.fromkeys(node for node in tsp_route if node in pickup_list))[1:]
+		if debug:
+			tsp_distance = sum(self.G[u][v]["weight"] for u, v in zip(tsp_route, tsp_route[1:]))
+			return pickup_order, tsp_route, tsp_distance
+		else:
+			return (pickup_order, None, None)
 
-        for node in tsp_route:
-            if node in pickup_list and node not in seen:
-                pickup_order.append(node)
-                seen.add(node)
+	def _plot(self, tsp_route: list[int] | None = None) -> None:
+		"""Debug plot of the grid and (optional) TSP route."""
+		import matplotlib.pyplot as plt
 
-        return tsp_route, tsp_distance, pickup_order
+		plt.imshow(self.grid, cmap="gray")
+		plt.grid(True)
 
-    def plot(self, path: list = None):
-        plt.imshow(self.grid, cmap="gray")
-        plt.grid(True)
+		if tsp_route:
+			# node2pos(wp) returns a (row:int, col:int) tuple
+			coords: list[tuple[int, int]] = [self.node2pos(wp) for wp in tsp_route]
+			rows, cols = zip(*coords)  # unzip into two sequences of ints
+			plt.plot(cols, rows, "r-")  # x = cols, y = rows
 
-        for key, (x, y) in self.waypoints.items():
-            plt.plot(x, y, "go")
-            # plt.text(x, y, key, fontsize=12, ha="right")
-        if path:
-            # Plot the path
-            path_coords = [self.node2pos(wp) for wp in path]
-            path_coords = np.array(path_coords)
-            plt.plot(path_coords[:, 1], path_coords[:, 0], "r-")
-        plt.show()
-
-    def plot_graph(self):
-        pos = nx.get_node_attributes(self.G, "pos")
-        nx.draw(
-            self.G,
-            pos=pos,
-            with_labels=True,
-            node_size=200,
-            node_color="lightblue",
-            edge_color="gray",
-        )
-        plt.show()
+		plt.show()
 
 
 class Dispatch:
